@@ -74,41 +74,43 @@ abas num único stream, o que impede separar a call da mídia.
   que `stop` remova exatamente o que foi criado (e nada do usuário), mesmo após crash.
 - **Idempotência**: `start` duas vezes não deve duplicar dispositivos.
 
-## 4. Interface proposta (CLI `audio-mic`, em Bash + `pactl`)
+## 4. Decisões (após as respostas)
+
+- **Ubuntu, sem sudo, sem `pactl`**: em vez de Bash + `pactl`, o motor é em Python e fala
+  direto com o servidor de áudio pela `libpulse` (biblioteca `pulsectl` embutida em
+  `audio_mic/_vendor`). Funciona igual no PipeWire (Ubuntu 22.10+) e no PulseAudio (22.04),
+  sem instalar nada.
+- **Interface gráfica** em GTK 3 (PyGObject), que já vem no Ubuntu desktop. É dinâmica: um
+  thread escuta os eventos do servidor de áudio e a janela se atualiza sozinha.
+- **Três modos de mistura**: voz + mídia, só mídia, só voz (mute nos loopbacks).
+- **Instalação** em `~/.local` com `install.sh`.
+
+## 5. Estrutura
 
 ```
-audio-mic start [--mic <source>] [--out <sink>]   # cria os dispositivos virtuais
-audio-mic stop                                    # remove tudo e restaura padrões
-audio-mic status                                  # mostra o que está ativo e o que é compartilhado
-audio-mic apps                                    # lista streams tocando (id, app, título)
-audio-mic share <id|nome-do-app>                  # passa a enviar esse app para a call
-audio-mic unshare <id|nome-do-app>                # volta a tocar só no fone
-audio-mic mode apps|tudo [--call <app>]           # alterna os modos da seção 2
-audio-mic vol mic|media <0-150>%                  # volume da voz / da mídia na mistura
-audio-mic mute mic|media [on|off|toggle]          # mutar voz ou mídia separadamente
+audio-mic               lançador (sem argumentos abre a janela)
+audio_mic/core.py       motor: cria/remove o grafo, move apps, mute/volume, eventos
+audio_mic/config.py     preferências em ~/.config/audio-mic/config.json
+audio_mic/cli.py        linha de comando
+audio_mic/gui.py        interface GTK 3
+audio_mic/meter.py      medidores de nível (GStreamer, opcional)
+install.sh / uninstall.sh
+tests/                  testes de configuração + teste de ponta a ponta com áudio real
 ```
 
-Dependências: `pactl` (pacote `pulseaudio-utils`/`libpulse`), opcional `pavucontrol`
-para ajuste visual.
+## 6. Fases
 
-## 5. Fases de implementação
-
-1. **MVP** — `start`/`stop`/`status`: cria o grafo da seção 1, salva estado, remove com
-   segurança. Teste manual: tocar YouTube no Firefox, mover via `pavucontrol`, ouvir o
-   "Mic Virtual" com `parecord`/gravador e confirmar voz + mídia.
-2. **Roteamento** — `apps`, `share`, `unshare`, busca por nome do app
-   (`application.name` / `application.process.binary`).
-3. **Modo "tudo"** — troca da saída padrão + fixação do app da call no fone; restaurar
-   a saída original no `stop`.
-4. **Controles de mixagem** — `vol` e `mute` para voz e mídia de forma independente.
-5. **Robustez** — seguir troca de fone, `trap` para limpeza, mensagens de erro claras
-   (sem PipeWire/Pulse, mic inexistente etc.), `shellcheck` + CI no GitHub Actions.
-6. **Opcional** — instalador (`make install` → `~/.local/bin`), serviço `systemd --user`,
-   atalho de teclado para mute da mídia, e talvez uma pequena GUI/tray.
-
-## 6. Em aberto (definir antes de implementar)
-
-- Distro e servidor de áudio (`pactl info | grep "Server Name"` → PipeWire ou PulseAudio?).
-- Só CLI, ou também GUI/tray?
-- Na mistura, sempre voz + mídia, ou também um modo "só mídia"? (hoje resolvido com
-  `audio-mic mute mic`).
+1. ✅ **MVP**: `start`/`stop`/`status`, idempotente, sem arquivos de estado (tudo é lido
+   do servidor).
+2. ✅ **Roteamento**: `apps`, `share`, `unshare`, por nome ou ID, com a escolha lembrada
+   por app.
+3. ✅ **Modo "tudo"**: tudo vai para a call, exceto os apps de call (lista editável). Não
+   mexe na saída padrão do sistema.
+4. ✅ **Controles de mixagem**: modos voz/mídia/ambos, volume de cada um, "ouvir o que a
+   call ouve".
+5. ✅ **Robustez**: reconexão se o servidor reiniciar, apps voltam para o fone sozinhos no
+   `stop`, cada loopback tem sua própria chave de "restore" (senão o PipeWire podia devolver
+   um mute antigo), e a config é mesclada entre GUI e CLI abertas ao mesmo tempo.
+6. ✅ **Interface gráfica + instalador sem sudo**.
+7. ⏭ Próximos passos possíveis: ícone na bandeja, atalho global de teclado para mutar a
+   mídia, ajuste de latência na interface.

@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PipeWire (only for the CI machine)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pipewire pipewire-pulse wireplumber pulseaudio-utils \
+            dbus-x11 python3-gi gir1.2-gtk-3.0 pyflakes3
+      - name: Lint
+        run: python3 -m pyflakes audio_mic/*.py tests/*.py
+      - name: Tests (against a real PipeWire server)
+        run: |
+          export XDG_RUNTIME_DIR=$(mktemp -d)
+          dbus-run-session -- sh -c '
+            pipewire & sleep 1; wireplumber & sleep 1; pipewire-pulse & sleep 2
+            /usr/bin/python3 -m unittest discover -s tests -v'
+      - name: GUI module imports
+        run: /usr/bin/python3 -c "import sys; sys.path.insert(0, '.'); import audio_mic.gui, audio_mic.cli"
