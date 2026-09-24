@@ -1,0 +1,7 @@
+#!/bin/sh
+# Lançador do AudioMic. Sem argumentos abre a interface gráfica; veja "audio-mic --help".
+# Usa o python3 do sistema (onde o PyGObject/GTK já vem instalado no Ubuntu).
+HERE="$(dirname "$(readlink -f "$0")")"
+PY=/usr/bin/python3
+[ -x "$PY" ] || PY=python3
+PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m audio_mic "$@"
